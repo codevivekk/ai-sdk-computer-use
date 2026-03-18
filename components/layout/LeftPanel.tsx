@@ -25,6 +25,7 @@ export interface ChatProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   endRef: React.RefObject<HTMLDivElement | null>;
   isInitializing: boolean;
+  isWaitingForNextStep?: boolean;
 }
 
 export function ChatInterface({
@@ -39,6 +40,7 @@ export function ChatInterface({
   containerRef,
   endRef,
   isInitializing,
+  isWaitingForNextStep,
 }: ChatProps) {
   return (
     <>
@@ -59,6 +61,19 @@ export function ChatInterface({
             isLoading={isLoading}
           />
         ))}
+        {isWaitingForNextStep && (
+          <div className="flex justify-center p-2 mb-4">
+            <div className="bg-blue-50 text-blue-600 rounded-lg py-2 px-4 shadow-sm border border-blue-100 flex items-center gap-2 text-sm">
+              <span className="flex gap-2 items-center">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                </span>
+                Waiting to respect rate limits...
+              </span>
+            </div>
+          </div>
+        )}
         <div ref={endRef} className="pb-2" />
       </div>
 

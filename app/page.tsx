@@ -22,6 +22,7 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const [mobileContainerRef, mobileEndRef] = useScrollToBottom();
 
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isWaitingForNextStep, setIsWaitingForNextStep] = useState(false);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
 
   const activeSession = useSessionStore((s) =>
@@ -59,12 +60,45 @@ function ChatSession({ sessionId }: { sessionId: string }) {
     },
     maxSteps: 30,
     onError: (error) => {
-      console.error(error);
+      console.error("Chat Error:", error);
+      let errorMessage = "Please try again later.";
+      
+      if (error.message?.toLowerCase().includes("rate limit") || error.message?.includes("429")) {
+        errorMessage = "You have exceeded the rate limit. Please wait a minute and try again.";
+      }
+      
       toast.error("There was an error", {
-        description: "Please try again later.",
+        description: errorMessage,
         richColors: true,
         position: "top-center",
       });
+    },
+    fetch: async (url, options) => {
+      if (options?.body) {
+        try {
+          const body = JSON.parse(options.body as string);
+          const messages = body.messages;
+          if (Array.isArray(messages) && messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            
+            // Check if this request is sending tool results back to the server.
+            // In the AI SDK, this is usually a message with role 'tool', or parts containing 'tool-result'
+            const isToolResponse = 
+              lastMessage.role === "tool" || 
+              (Array.isArray(lastMessage.parts) && lastMessage.parts.some((p: any) => p.type === "tool-result" || p.type === "tool-invocation"));
+            
+            if (isToolResponse) {
+              setIsWaitingForNextStep(true);
+              console.log("Waiting 10 seconds after event before next step...");
+              await new Promise(resolve => setTimeout(resolve, 10000));
+              setIsWaitingForNextStep(false);
+            }
+          }
+        } catch (e) {
+          console.error("Error in custom fetch interceptor", e);
+        }
+      }
+      return fetch(url, options);
     },
   });
 
@@ -181,6 +215,7 @@ function ChatSession({ sessionId }: { sessionId: string }) {
     containerRef: desktopContainerRef,
     endRef: desktopEndRef,
     isInitializing,
+    isWaitingForNextStep,
   };
 
   const mobileChatProps = {

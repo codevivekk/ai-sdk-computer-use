@@ -1,6 +1,6 @@
 "use client";
 
-import type { Message } from "ai";
+import type { Message, ToolInvocation } from "ai";
 import { AnimatePresence, motion } from "motion/react";
 import React, { memo, useEffect } from "react";
 import equal from "fast-deep-equal";
@@ -10,58 +10,52 @@ import { ToolCardWrapper } from "@/features/events/components/ToolCard";
 import { Streamdown } from "streamdown";
 import { ABORTED, cn } from "@/lib/utils";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ToolCallTracker({ part }: { part: any }) {
+function ToolCallTracker({ part }: { part: { type: "tool-invocation", toolInvocation: ToolInvocation } }) {
   const addEvent = useSessionStore((s) => s.addEvent);
   const updateEvent = useSessionStore((s) => s.updateEvent);
 
   useEffect(() => {
-    const { toolName, toolCallId, state, args, result } = part.toolInvocation;
+    const toolInvocation = part.toolInvocation;
+    const { toolName, toolCallId, state, args } = toolInvocation;
     const sessionState = useSessionStore.getState();
     const activeSession = sessionState.sessions.find(s => s.id === sessionState.activeSessionId);
     if (!activeSession) return;
     const existing = activeSession.events.find((e) => e.id === toolCallId);
 
     if (state === "call" && !existing) {
-      let type: AIEvent["type"] | null = null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let payload: any = {};
+      let eventPayload: AIEvent | null = null;
+      const baseArgs = {
+        id: toolCallId,
+        timestamp: Date.now(),
+        status: "pending" as const,
+      };
+
+      // Ensure args is treated as a record to safely parse dynamic tool calls
+      const parsedArgs = args as Record<string, unknown>;
 
       if (toolName === "computer") {
-        if (args.action === "type") {
-          type = "typing";
-          payload = { text: args.text || "" };
-        } else if (args.action === "key") {
-          type = "key_press";
-          payload = { key: args.text || "" };
-        } else if (args.action === "screenshot") {
-          type = "screenshot";
-          payload = {};
-        } else if (args.action === "wait") {
-          type = "wait";
-          payload = { durationMs: (args.duration || 0) * 1000 };
-        } else if (args.action === "scroll") {
-          type = "scroll";
-          payload = { direction: args.scroll_direction, amount: args.scroll_amount };
+        if (parsedArgs.action === "type") {
+          eventPayload = { ...baseArgs, type: "typing", payload: { text: String(parsedArgs.text || "") } };
+        } else if (parsedArgs.action === "key") {
+          eventPayload = { ...baseArgs, type: "key_press", payload: { key: String(parsedArgs.text || "") } };
+        } else if (parsedArgs.action === "screenshot") {
+          eventPayload = { ...baseArgs, type: "screenshot", payload: {} };
+        } else if (parsedArgs.action === "wait") {
+          eventPayload = { ...baseArgs, type: "wait", payload: { durationMs: (Number(parsedArgs.duration) || 0) * 1000 } };
+        } else if (parsedArgs.action === "scroll") {
+          eventPayload = { ...baseArgs, type: "scroll", payload: { direction: String(parsedArgs.scroll_direction), amount: Number(parsedArgs.scroll_amount) } };
         } else {
-          type = "mouse";
-          payload = { action: args.action, coordinate: args.coordinate };
+          eventPayload = { ...baseArgs, type: "mouse", payload: { action: String(parsedArgs.action), coordinate: parsedArgs.coordinate as [number, number] | undefined } };
         }
       } else if (toolName === "bash") {
-        type = "bash";
-        payload = { command: args.command || "" };
+        eventPayload = { ...baseArgs, type: "bash", payload: { command: String(parsedArgs.command || "") } };
       }
 
-      if (type) {
-        addEvent({
-          id: toolCallId,
-          timestamp: Date.now(),
-          status: "pending",
-          type,
-          payload,
-        } as AIEvent);
+      if (eventPayload) {
+        addEvent(eventPayload);
       }
     } else if (state === "result" && existing && existing.status === "pending") {
+      const result = toolInvocation.result;
       const duration = Date.now() - existing.timestamp;
       let status: "success" | "error" | "aborted" = "success";
 
@@ -92,6 +86,7 @@ function ToolCallTracker({ part }: { part: any }) {
 
   return null;
 }
+
 
 const PurePreviewMessage = ({
   message,

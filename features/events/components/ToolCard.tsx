@@ -30,8 +30,7 @@ export function ToolCard({ event }: ToolCardProps) {
 
   let actionLabel = "";
   let actionDetail = "";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let ActionIcon: any = MousePointer;
+  let ActionIcon: React.ElementType = MousePointer;
 
   switch (event.type) {
     case "typing":
